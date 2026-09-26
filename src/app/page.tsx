@@ -297,7 +297,8 @@ export default function CodePadApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           language: langConfig.pistonLanguage || activeFile.language,
-          version: langConfig.pistonVersion || "*",
+          // The API resolves the current supported Piston version from /runtimes.
+          // Avoid sending stale hardcoded versions from the language metadata.
           code: activeFile.content,
           stdin,
         }),
