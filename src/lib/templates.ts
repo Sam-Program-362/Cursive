@@ -87,7 +87,7 @@ def chunk_list(lst, chunk_size):
         isFolder: false,
         content: `# Python 3 CodePad Workspace
 
-Press the **Run** button (or Ctrl+Enter) to execute \`main.py\` in the sandbox console!
+Press the **Run** button (or Ctrl+Enter) to run \`main.py\` right in your browser (Pyodide)!
 
 Use the **Notepad** panel on the right to keep separate notes for each file.
 `,

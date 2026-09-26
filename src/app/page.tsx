@@ -20,6 +20,7 @@ import {
   exportProjectAsZip,
 } from "@/lib/storage";
 import { getLanguageByFilename } from "@/lib/languages";
+import { executeInBrowser, isPythonRuntimeReady } from "@/lib/runtime";
 import { STARTER_TEMPLATES, ProjectTemplate } from "@/lib/templates";
 import { THEMES } from "@/lib/themes";
 
@@ -74,6 +75,8 @@ export default function CodePadApp() {
 
   // Execution state
   const [isRunning, setIsRunning] = useState(false);
+  const [runtimeStatus, setRuntimeStatus] = useState<string | null>(null);
+  const [runLanguage, setRunLanguage] = useState<string>("python");
   const [executionResult, setExecutionResult] =
     useState<ExecutionResult | null>(null);
   const [stdin, setStdin] = useState("");
@@ -281,30 +284,38 @@ export default function CodePadApp() {
     handleCloseTab(fileId);
   };
 
-  // Run code against sandbox execution API
+  // Keep the run-language selector in sync with the active file's type
+  useEffect(() => {
+    if (!activeFile) return;
+    const detected = getLanguageByFilename(activeFile.name).id;
+    setRunLanguage(detected === "plaintext" ? "javascript" : detected);
+  }, [activeFileId, activeFile?.name]);
+
+  // Run code entirely in the browser (Pyodide for Python, sandboxed iframe for JS)
   const handleRunCode = async () => {
     if (!activeFile) return;
 
     setIsConsoleOpen(true);
     setIsRunning(true);
     setExecutionResult(null);
+    setRuntimeStatus(null);
 
-    const langConfig = getLanguageByFilename(activeFile.name);
+    const languageId =
+      runLanguage || getLanguageByFilename(activeFile.name).id || activeFile.language;
 
     try {
-      const res = await fetch("/api/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          language: langConfig.pistonLanguage || activeFile.language,
-          // The API resolves the current supported Piston version from /runtimes.
-          // Avoid sending stale hardcoded versions from the language metadata.
-          code: activeFile.content,
-          stdin,
-        }),
-      });
-
-      const data: ExecutionResult = await res.json();
+      const data = await executeInBrowser(
+        languageId,
+        activeFile.content,
+        stdin,
+        {
+          onRuntimeLoading: () => {
+            if (!isPythonRuntimeReady()) {
+              setRuntimeStatus("Loading Python runtime (first run only)...");
+            }
+          },
+        }
+      );
       setExecutionResult(data);
     } catch (err: any) {
       setExecutionResult({
@@ -316,6 +327,7 @@ export default function CodePadApp() {
         status: "error",
       });
     } finally {
+      setRuntimeStatus(null);
       setIsRunning(false);
     }
   };
@@ -577,6 +589,9 @@ export default function CodePadApp() {
             isOpen={isConsoleOpen}
             result={executionResult}
             isRunning={isRunning}
+            runtimeStatus={runtimeStatus}
+            runLanguage={runLanguage}
+            setRunLanguage={setRunLanguage}
             activeFile={activeFile}
             allFiles={files}
             stdin={stdin}

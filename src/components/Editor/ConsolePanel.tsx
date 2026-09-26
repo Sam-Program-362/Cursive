@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { ExecutionResult, FileItem } from "@/types";
+import { RUNNABLE_LANGUAGES, COMING_SOON_LANGUAGES } from "@/lib/languages";
 import {
   Terminal,
   Play,
@@ -23,6 +24,11 @@ interface ConsolePanelProps {
   isOpen: boolean;
   result: ExecutionResult | null;
   isRunning: boolean;
+  /** e.g. "Loading Python runtime..." shown while a runtime downloads. */
+  runtimeStatus?: string | null;
+  /** Language the Run button will execute the active file as. */
+  runLanguage: string;
+  setRunLanguage: (id: string) => void;
   activeFile: FileItem | null;
   allFiles: FileItem[];
   stdin: string;
@@ -36,6 +42,9 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
   isOpen,
   result,
   isRunning,
+  runtimeStatus,
+  runLanguage,
+  setRunLanguage,
   activeFile,
   allFiles,
   stdin,
@@ -139,10 +148,29 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
 
         {/* Status Badges & Action Buttons */}
         <div className="flex items-center gap-2">
+          {/* Run language selector — browser runtimes only */}
+          <select
+            value={runLanguage}
+            onChange={(e) => setRunLanguage(e.target.value)}
+            title="Code runs in your browser — Python via Pyodide, JavaScript natively"
+            className="hidden sm:block bg-slate-800 border border-slate-700 text-slate-300 text-[11px] rounded px-1.5 py-0.5 focus:outline-none focus:border-blue-600"
+          >
+            {RUNNABLE_LANGUAGES.map((lang) => (
+              <option key={lang.id} value={lang.id}>
+                {lang.name}
+              </option>
+            ))}
+            {COMING_SOON_LANGUAGES.map((lang) => (
+              <option key={lang.id} value={lang.id} disabled>
+                {lang.name}
+              </option>
+            ))}
+          </select>
+
           {/* Execution Status Badge */}
           {isRunning ? (
             <span className="flex items-center gap-1 text-[11px] text-blue-400 bg-blue-950/60 px-2 py-0.5 rounded border border-blue-800/50 animate-pulse">
-              Running...
+              {runtimeStatus || "Running..."}
             </span>
           ) : result?.status === "success" ? (
             <span className="flex items-center gap-1 text-[11px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/50">
@@ -223,7 +251,10 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
               {isRunning && (
                 <div className="text-blue-400 flex items-center gap-2">
                   <span className="animate-spin">🌀</span>
-                  <span>Executing {activeFile?.name || "code"}...</span>
+                  <span>
+                    {runtimeStatus ||
+                      `Executing ${activeFile?.name || "code"} in your browser...`}
+                  </span>
                 </div>
               )}
 

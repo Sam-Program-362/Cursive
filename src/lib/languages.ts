@@ -1,8 +1,10 @@
 export interface LanguageConfig {
   id: string; // Monaco language ID
   name: string; // Display name
-  pistonLanguage: string; // Piston API language runtime
-  pistonVersion?: string;
+  /** Which in-browser runtime executes this language (null = not runnable). */
+  runtime: "pyodide" | "browser-js" | "iframe-preview" | null;
+  /** Shown in the dropdown but disabled until a browser runtime exists. */
+  comingSoon?: boolean;
   defaultExtension: string;
   extensions: string[];
   sampleCode: string;
@@ -13,11 +15,10 @@ export const SUPPORTED_LANGUAGES: LanguageConfig[] = [
   {
     id: "python",
     name: "Python 3",
-    pistonLanguage: "python",
-    pistonVersion: "3.10.0",
     defaultExtension: ".py",
     extensions: [".py", ".pyw", ".pyi"],
     isRunnable: true,
+    runtime: "pyodide",
     sampleCode: `# Welcome to CodePad (Python 3)
 def greet(name: str) -> str:
     return f"Hello, {name}! 🚀"
@@ -43,12 +44,11 @@ if __name__ == "__main__":
   },
   {
     id: "javascript",
-    name: "JavaScript (Node.js)",
-    pistonLanguage: "javascript",
-    pistonVersion: "18.15.0",
+    name: "JavaScript",
     defaultExtension: ".js",
     extensions: [".js", ".mjs", ".cjs"],
     isRunnable: true,
+    runtime: "browser-js",
     sampleCode: `// Welcome to CodePad (JavaScript)
 function calculateStats(numbers) {
   const sum = numbers.reduce((acc, curr) => acc + curr, 0);
@@ -68,12 +68,12 @@ console.log("Computed Stats:", JSON.stringify(stats, null, 2));
   },
   {
     id: "typescript",
-    name: "TypeScript",
-    pistonLanguage: "typescript",
-    pistonVersion: "5.0.3",
+    name: "TypeScript (coming soon)",
     defaultExtension: ".ts",
     extensions: [".ts", ".tsx"],
-    isRunnable: true,
+    isRunnable: false,
+    runtime: null,
+    comingSoon: true,
     sampleCode: `// Welcome to CodePad (TypeScript)
 interface User {
   id: number;
@@ -95,10 +95,10 @@ console.log(\`User \${user.name} (\${user.role}) has skills: \${user.skills.join
   {
     id: "html",
     name: "HTML5",
-    pistonLanguage: "html",
     defaultExtension: ".html",
     extensions: [".html", ".htm"],
-    isRunnable: true, // We can run HTML via in-browser iframe preview!
+    isRunnable: true,
+    runtime: "iframe-preview",
     sampleCode: `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -156,10 +156,10 @@ console.log(\`User \${user.name} (\${user.role}) has skills: \${user.skills.join
   {
     id: "css",
     name: "CSS",
-    pistonLanguage: "css",
     defaultExtension: ".css",
     extensions: [".css", ".scss", ".less"],
     isRunnable: false,
+    runtime: null,
     sampleCode: `/* Custom CSS Stylesheet */
 :root {
   --primary: #3b82f6;
@@ -176,12 +176,12 @@ body {
   },
   {
     id: "cpp",
-    name: "C++ (GCC)",
-    pistonLanguage: "cpp",
-    pistonVersion: "10.2.0",
+    name: "C++ (coming soon)",
     defaultExtension: ".cpp",
     extensions: [".cpp", ".cc", ".cxx", ".h", ".hpp"],
-    isRunnable: true,
+    isRunnable: false,
+    runtime: null,
+    comingSoon: true,
     sampleCode: `#include <iostream>
 #include <vector>
 #include <numeric>
@@ -197,12 +197,12 @@ int main() {
   },
   {
     id: "c",
-    name: "C (GCC)",
-    pistonLanguage: "c",
-    pistonVersion: "10.2.0",
+    name: "C (coming soon)",
     defaultExtension: ".c",
     extensions: [".c", ".h"],
-    isRunnable: true,
+    isRunnable: false,
+    runtime: null,
+    comingSoon: true,
     sampleCode: `#include <stdio.h>
 
 int main() {
@@ -216,12 +216,12 @@ int main() {
   },
   {
     id: "rust",
-    name: "Rust",
-    pistonLanguage: "rust",
-    pistonVersion: "1.68.2",
+    name: "Rust (coming soon)",
     defaultExtension: ".rs",
     extensions: [".rs"],
-    isRunnable: true,
+    isRunnable: false,
+    runtime: null,
+    comingSoon: true,
     sampleCode: `fn main() {
     println!("🚀 Hello from CodePad Rust Runner!");
     let primes = vec![2, 3, 5, 7, 11, 13, 17, 19];
@@ -233,17 +233,17 @@ int main() {
   {
     id: "json",
     name: "JSON",
-    pistonLanguage: "json",
     defaultExtension: ".json",
     extensions: [".json"],
     isRunnable: false,
+    runtime: null,
     sampleCode: `{
   "name": "codepad-workspace",
   "version": "1.0.0",
   "features": [
     "Monaco Editor",
     "Neon DB Sync",
-    "Piston Sandbox Execution",
+    "In-Browser Code Execution",
     "GitHub Integration",
     "Per-File Notepad"
   ]
@@ -253,10 +253,10 @@ int main() {
   {
     id: "markdown",
     name: "Markdown",
-    pistonLanguage: "markdown",
     defaultExtension: ".md",
     extensions: [".md", ".markdown"],
     isRunnable: false,
+    runtime: null,
     sampleCode: `# 📝 Project Notes
 
 Welcome to **CodePad**!
@@ -265,11 +265,25 @@ Welcome to **CodePad**!
 - ⚡ **Monaco Editor** with VS Code IntelliSense
 - 📱 **Mobile-First Layout** with quick-key bar
 - 💾 **Neon Postgres Auto-Save** & GitHub push/pull
-- 🏃 **Run Code in Sandbox** (Python, JS, C++, Rust, etc.)
+- 🏃 **Run Code In Your Browser** (Python via Pyodide, JavaScript natively)
 - 📋 **Per-File Notepad** for private notes & todos
 `,
   },
 ];
+
+/** Languages offered in the run/language dropdown (runnable first). */
+export const RUNNABLE_LANGUAGES = SUPPORTED_LANGUAGES.filter(
+  (lang) => lang.runtime === "pyodide" || lang.runtime === "browser-js"
+);
+
+/** Languages listed but disabled until an in-browser runtime exists. */
+export const COMING_SOON_LANGUAGES = SUPPORTED_LANGUAGES.filter(
+  (lang) => lang.comingSoon
+);
+
+export function getLanguageById(id: string): LanguageConfig | undefined {
+  return SUPPORTED_LANGUAGES.find((lang) => lang.id === id);
+}
 
 export function getLanguageByFilename(filename: string): LanguageConfig {
   const ext = "." + filename.split(".").pop()?.toLowerCase();
@@ -280,7 +294,7 @@ export function getLanguageByFilename(filename: string): LanguageConfig {
     match || {
       id: "plaintext",
       name: "Plain Text",
-      pistonLanguage: "plaintext",
+      runtime: null,
       defaultExtension: ".txt",
       extensions: [".txt"],
       sampleCode: "",
