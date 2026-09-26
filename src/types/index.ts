@@ -77,6 +77,7 @@ export interface ExecutionResult {
   language: string;
   version?: string;
   error?: string;
+  engine?: string;
   status: "idle" | "running" | "success" | "error";
 }
 

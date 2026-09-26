@@ -1,6 +1,6 @@
 # 🚀 CodePad — Mobile-Friendly Web Code Editor
 
-**CodePad** is a responsive, browser-based code editor web app built with Next.js (App Router), Monaco Editor, Neon PostgreSQL (Drizzle ORM), GitHub Integration, and Sandbox Code Execution.
+**CodePad** is a responsive, browser-based code editor web app built with Next.js (App Router), Monaco Editor, Neon PostgreSQL (Drizzle ORM), GitHub Integration, and in-browser Code Execution.
 
 ---
 
@@ -42,9 +42,12 @@
    - **Pull from GitHub**: Import public or private repository trees into CodePad
    - **Export as ZIP**: One-click download of the entire workspace
 
-8. **Code Execution (Sandbox Runner)**
-   - **Run** button executes code in Python 3, Node.js, C++, C, Rust, etc.
-   - Piston API sandbox execution with local runner fallback
+8. **Code Execution (In-Browser Runner)**
+   - **Run** button executes code entirely on your own device — no server, no API keys, no rate limits
+   - **Python 3** runs via [Pyodide](https://pyodide.org) (CPython compiled to WebAssembly), lazily loaded from the CDN on your first Run
+   - **JavaScript** runs natively inside a sandboxed `<iframe>`; `console.log` output is piped back to the console
+   - Both runtimes enforce a 10-second hard timeout so runaway loops can't freeze the tab
+   - Other languages (TypeScript, C, C++, Rust) are listed as *coming soon* until they have a browser runtime
    - Bottom Console Panel with stdout, stderr, execution time, and exit status
    - **Web Live Preview**: In-browser sandboxed iframe for HTML/CSS/JS web projects
    - Interactive Stdin input stream
@@ -57,7 +60,7 @@
 - **Editor**: Monaco Editor (`@monaco-editor/react`)
 - **Database**: Neon Serverless PostgreSQL with Drizzle ORM
 - **Styling**: Tailwind CSS + Lucide Icons
-- **Execution**: Piston Cloud Sandbox API (`emkc.org`) + Dual Sandbox Fallback
+- **Execution**: In-browser — Pyodide (WebAssembly Python) + sandboxed iframe for JavaScript
 - **Exporting**: JSZip
 
 ---
