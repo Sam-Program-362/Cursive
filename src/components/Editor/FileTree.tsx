@@ -346,10 +346,9 @@ const FileNode: React.FC<FileNodeProps> = ({
 
         {/* Notepad Indicator Badge */}
         {hasNotes && !isFolder && (
-          <StickyNote
-            className="w-3 h-3 text-amber-400 shrink-0"
-            title="Has attached notes"
-          />
+          <span className="shrink-0 flex" title="Has attached notes">
+            <StickyNote className="w-3 h-3 text-amber-400" />
+          </span>
         )}
 
         {/* File Actions */}
