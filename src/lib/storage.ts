@@ -7,6 +7,7 @@ const STORAGE_KEY_FILES = "codepad_files";
 const STORAGE_KEY_SETTINGS = "codepad_settings";
 const STORAGE_KEY_ACTIVE_PROJECT = "codepad_active_project_id";
 const STORAGE_KEY_ACTIVE_FILE = "codepad_active_file_id";
+const STORAGE_KEY_CONSOLE_PANEL = "codepad_console_panel";
 
 export const DEFAULT_SETTINGS: EditorSettings = {
   theme: "vs-dark",
@@ -52,6 +53,56 @@ export function saveSettings(settings: EditorSettings) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
+  } catch {}
+}
+
+/* ------------------------------------------------------------------ */
+/* Run-output (console) panel preferences — persisted open/width state */
+/* ------------------------------------------------------------------ */
+
+export interface ConsolePanelPrefs {
+  /** Whether the run-output panel was open in the user's last session. */
+  isOpen: boolean;
+  /** Last user-chosen width (px) of the panel on wide screens. */
+  width: number;
+}
+
+export const CONSOLE_PANEL_MIN_WIDTH = 280;
+export const CONSOLE_PANEL_DEFAULT_WIDTH = 440;
+
+export const DEFAULT_CONSOLE_PREFS: ConsolePanelPrefs = {
+  isOpen: false,
+  width: CONSOLE_PANEL_DEFAULT_WIDTH,
+};
+
+export function loadConsolePrefs(): ConsolePanelPrefs {
+  if (typeof window === "undefined") return DEFAULT_CONSOLE_PREFS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_CONSOLE_PANEL);
+    if (!raw) return DEFAULT_CONSOLE_PREFS;
+    const parsed = JSON.parse(raw);
+    return {
+      isOpen: typeof parsed?.isOpen === "boolean" ? parsed.isOpen : false,
+      width:
+        typeof parsed?.width === "number" &&
+        parsed.width >= CONSOLE_PANEL_MIN_WIDTH &&
+        parsed.width <= 1600
+          ? Math.round(parsed.width)
+          : CONSOLE_PANEL_DEFAULT_WIDTH,
+    };
+  } catch {
+    return DEFAULT_CONSOLE_PREFS;
+  }
+}
+
+export function saveConsolePrefs(prefs: Partial<ConsolePanelPrefs>) {
+  if (typeof window === "undefined") return;
+  try {
+    const current = loadConsolePrefs();
+    localStorage.setItem(
+      STORAGE_KEY_CONSOLE_PANEL,
+      JSON.stringify({ ...current, ...prefs })
+    );
   } catch {}
 }
 

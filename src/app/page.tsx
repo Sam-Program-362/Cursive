@@ -12,6 +12,8 @@ import {
 import {
   loadSettings,
   saveSettings,
+  loadConsolePrefs,
+  saveConsolePrefs,
   initializeWorkspace,
   saveProjectsLocal,
   saveFilesLocal,
@@ -105,6 +107,9 @@ export default function CodePadApp() {
     if (window.innerWidth < 768) {
       setIsSidebarOpen(false);
     }
+
+    // Restore the run-output panel's last open/closed state
+    setIsConsoleOpen(loadConsolePrefs().isOpen);
   }, []);
 
   const activeProject =
@@ -181,6 +186,23 @@ export default function CodePadApp() {
       saveSettings(updated);
       return updated;
     });
+  };
+
+  // Run-output (console) panel visibility — persisted across sessions
+  const openConsole = () => {
+    setIsConsoleOpen(true);
+    saveConsolePrefs({ isOpen: true });
+  };
+
+  const handleCloseConsole = () => {
+    setIsConsoleOpen(false);
+    saveConsolePrefs({ isOpen: false });
+  };
+
+  const handleToggleConsole = () => {
+    const next = !isConsoleOpen;
+    setIsConsoleOpen(next);
+    saveConsolePrefs({ isOpen: next });
   };
 
   // Switch active file & open tab
@@ -295,7 +317,7 @@ export default function CodePadApp() {
   const handleRunCode = async () => {
     if (!activeFile) return;
 
-    setIsConsoleOpen(true);
+    openConsole();
     setIsRunning(true);
     setExecutionResult(null);
     setRuntimeStatus(null);
@@ -515,7 +537,7 @@ export default function CodePadApp() {
         isConsoleOpen={isConsoleOpen}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         onToggleNotepad={() => setIsNotepadOpen(!isNotepadOpen)}
-        onToggleConsole={() => setIsConsoleOpen(!isConsoleOpen)}
+        onToggleConsole={handleToggleConsole}
         onRun={handleRunCode}
         onOpenAI={() => setIsAIModalOpen(true)}
         onOpenTheme={() => setIsThemeModalOpen(true)}
@@ -583,24 +605,25 @@ export default function CodePadApp() {
               editorRefOut={editorRef}
             />
           </div>
-
-          {/* Bottom Execution Console Drawer */}
-          <ConsolePanel
-            isOpen={isConsoleOpen}
-            result={executionResult}
-            isRunning={isRunning}
-            runtimeStatus={runtimeStatus}
-            runLanguage={runLanguage}
-            setRunLanguage={setRunLanguage}
-            activeFile={activeFile}
-            allFiles={files}
-            stdin={stdin}
-            setStdin={setStdin}
-            onRun={handleRunCode}
-            onClose={() => setIsConsoleOpen(false)}
-            onClear={() => setExecutionResult(null)}
-          />
         </div>
+
+        {/* Right Run-Output Panel — split pane on desktop, slide-in
+            overlay drawer on mobile. Mirrors the file-tree sidebar. */}
+        <ConsolePanel
+          isOpen={isConsoleOpen}
+          result={executionResult}
+          isRunning={isRunning}
+          runtimeStatus={runtimeStatus}
+          runLanguage={runLanguage}
+          setRunLanguage={setRunLanguage}
+          activeFile={activeFile}
+          allFiles={files}
+          stdin={stdin}
+          setStdin={setStdin}
+          onRun={handleRunCode}
+          onClose={handleCloseConsole}
+          onClear={() => setExecutionResult(null)}
+        />
 
         {/* Right Collapsible Notepad Panel */}
         <NotepadPanel
