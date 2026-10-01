@@ -139,31 +139,38 @@ export async function runPython(
   try {
     pyodide.setStdin({
       stdin: () => {
-        // Step 1: hand out the pre-filled lines in order.
-        if (stdinIndex < stdinLines.length) {
-          activePrompt = "";
-          return stdinLines[stdinIndex++];
-        }
-        // Step 2: the box is empty or exhausted — ask the user live instead
-        // of returning null, which would raise
-        // "EOFError: EOF when reading a line".
-        const message = activePrompt.trim() ? activePrompt : "Input:";
-        activePrompt = "";
-        beginInputPause();
-        let answer: string | null = null;
+        // Never let an exception escape into Pyodide: it would be swallowed
+        // and reported as the opaque "OSError: [Errno 29] I/O error".
         try {
-          answer =
-            typeof window !== "undefined" &&
-            typeof window.prompt === "function"
-              ? window.prompt(message)
-              : null;
-        } catch {
-          answer = null;
-        } finally {
-          endInputPause();
+          // Step 1: hand out the pre-filled lines in order.
+          if (stdinIndex < stdinLines.length) {
+            activePrompt = "";
+            return stdinLines[stdinIndex++];
+          }
+          // Step 2: the box is empty or exhausted — ask the user live instead
+          // of returning null, which would raise
+          // "EOFError: EOF when reading a line".
+          const message = activePrompt.trim() ? activePrompt : "Input:";
+          activePrompt = "";
+          beginInputPause();
+          let answer: string | null = null;
+          try {
+            answer =
+              typeof window !== "undefined" &&
+              typeof window.prompt === "function"
+                ? window.prompt(message)
+                : null;
+          } catch {
+            answer = null;
+          } finally {
+            endInputPause();
+          }
+          // Cancelling the dialog feeds an empty line back to Python.
+          return answer ?? "";
+        } catch (err) {
+          console.error("Cursive stdin handler error:", err);
+          return null; // EOF — end the program instead of a cryptic OSError
         }
-        // Cancelling the dialog feeds an empty line back to Python.
-        return answer ?? "";
       },
     });
   } catch {
