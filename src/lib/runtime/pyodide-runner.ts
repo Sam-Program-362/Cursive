@@ -15,7 +15,10 @@ export const PYTHON_TIMEOUT_MS = 10_000;
 type PyodideInterface = {
   runPythonAsync: (code: string) => Promise<unknown>;
   runPython: (code: string) => unknown;
-  globals: { get: (name: string) => any };
+  globals: {
+    get: (name: string) => any;
+    set: (name: string, value: unknown) => void;
+  };
   setStdin: (options: { stdin: () => string | null }) => void;
 };
 
@@ -96,24 +99,101 @@ export async function runPython(
 ): Promise<PythonRunResult> {
   const pyodide = await loadPythonRuntime();
 
-  // Feed stdin line by line from the user-supplied input box.
+  // --- Live-prompt bridge -------------------------------------------------
+  // The Python-side input() wrapper (installed below) pushes the prompt text
+  // here right before every input() call so the JS stdin handler can show it
+  // as the message of the fallback window.prompt() dialog.
+  let activePrompt = "";
+
+  // --- Timeout accounting -------------------------------------------------
+  // Time spent waiting on the user (window.prompt) must not count towards the
+  // hard timeout, otherwise a slow typist trips the limit.
+  const startedAt = Date.now();
+  let pausedMs = 0;
+  let pauseStartedAt: number | null = null;
+  const beginInputPause = () => {
+    pauseStartedAt = Date.now();
+  };
+  const endInputPause = () => {
+    if (pauseStartedAt !== null) {
+      pausedMs += Date.now() - pauseStartedAt;
+      pauseStartedAt = null;
+    }
+  };
+  const elapsedMs = () => Date.now() - startedAt - pausedMs;
+
+  try {
+    pyodide.globals.set("__cursive_set_prompt", (prompt: unknown) => {
+      activePrompt =
+        typeof prompt === "string" ? prompt : String(prompt ?? "");
+    });
+  } catch {
+    /* non-fatal: the Python wrapper falls back to a no-op setter */
+  }
+
+  // Feed stdin line by line from the user-supplied input box. Re-applied on
+  // every run with a freshly split list and reset counter, so each Run
+  // replays the box's lines from the top.
   const stdinLines = stdin.length ? stdin.split("\n") : [];
   let stdinIndex = 0;
   try {
     pyodide.setStdin({
-      stdin: () => (stdinIndex < stdinLines.length ? stdinLines[stdinIndex++] : null),
+      stdin: () => {
+        // Step 1: hand out the pre-filled lines in order.
+        if (stdinIndex < stdinLines.length) {
+          activePrompt = "";
+          return stdinLines[stdinIndex++];
+        }
+        // Step 2: the box is empty or exhausted — ask the user live instead
+        // of returning null, which would raise
+        // "EOFError: EOF when reading a line".
+        const message = activePrompt.trim() ? activePrompt : "Input:";
+        activePrompt = "";
+        beginInputPause();
+        let answer: string | null = null;
+        try {
+          answer =
+            typeof window !== "undefined" &&
+            typeof window.prompt === "function"
+              ? window.prompt(message)
+              : null;
+        } catch {
+          answer = null;
+        } finally {
+          endInputPause();
+        }
+        // Cancelling the dialog feeds an empty line back to Python.
+        return answer ?? "";
+      },
     });
   } catch {
     /* older pyodide builds without setStdin */
   }
 
-  // Redirect sys.stdout / sys.stderr into in-memory string buffers.
+  // Redirect sys.stdout / sys.stderr into in-memory string buffers and wrap
+  // builtins.input so that:
+  //   * the prompt text reaches the JS stdin handler (for window.prompt), and
+  //   * every answer is echoed into stdout, so the transcript reads like a
+  //     real terminal session (e.g. "Choice: 1").
+  // The wrapper is installed idempotently — the original input() is captured
+  // once and re-used by every subsequent run's wrapper.
   await pyodide.runPythonAsync(`
-import sys, io
+import sys, io, builtins
 __cursive_stdout = io.StringIO()
 __cursive_stderr = io.StringIO()
 sys.stdout = __cursive_stdout
 sys.stderr = __cursive_stderr
+if "__cursive_set_prompt" not in globals():
+    def __cursive_set_prompt(_prompt):
+        pass
+if not hasattr(builtins, "__cursive_real_input"):
+    builtins.__cursive_real_input = builtins.input
+def __cursive_input(prompt=""):
+    __cursive_set_prompt("" if prompt is None else str(prompt))
+    line = builtins.__cursive_real_input(prompt)
+    __cursive_stdout.write(str(line) + "\\n")
+    return line
+builtins.input = __cursive_input
 `);
 
   const readBuffers = (): { stdout: string; stderr: string } => {
@@ -140,9 +220,19 @@ sys.stderr = __cursive_stderr
     }
   };
 
+  // Hard timeout — re-armed against the remaining budget each time so time
+  // spent paused on window.prompt() is excluded from the countdown.
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<"__timeout__">((resolve) => {
-    timer = setTimeout(() => resolve("__timeout__"), timeoutMs);
+    const arm = () => {
+      const remaining = timeoutMs - elapsedMs();
+      if (remaining <= 0) {
+        resolve("__timeout__");
+        return;
+      }
+      timer = setTimeout(arm, remaining);
+    };
+    arm();
   });
 
   try {
