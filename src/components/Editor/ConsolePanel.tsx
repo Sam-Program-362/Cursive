@@ -437,18 +437,24 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
             {/* Interactive Stdin Row */}
             <div className="mt-2 pt-2 border-t border-slate-800/80 flex flex-col gap-1.5 shrink-0">
               <span className="text-slate-500 text-[11px] font-medium">
-                Standard Input (stdin):
+                Standard Input (stdin):{" "}
+                <span className="text-slate-600 font-normal">
+                  one line per input() — leave empty to be prompted live
+                </span>
               </span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Optional input passed to program..."
+              <div className="flex items-end gap-2">
+                <textarea
+                  rows={2}
+                  placeholder="Optional input, one line per input() call..."
                   value={stdin}
                   onChange={(e) => setStdin(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") onRun();
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      onRun();
+                    }
                   }}
-                  className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-mono"
+                  className="flex-1 min-w-0 resize-none bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-mono leading-relaxed"
                 />
                 <button
                   type="button"
