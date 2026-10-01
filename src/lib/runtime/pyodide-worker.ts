@@ -144,17 +144,43 @@ async function executeRun(
   // Applied on every run with a freshly split list and reset counter.
   pyodide.setStdin({
     stdin: () => {
-      // Step 1: pre-filled lines from the stdin box, in order.
-      if (stdinIndex < stdinLines.length) {
-        activePrompt = "";
-        return stdinLines[stdinIndex++];
+      // Two attempts: a transient failure must not kill the program. If both
+      // fail, surface the REAL error into the run's stderr and return EOF —
+      // otherwise Pyodide swallows the exception and reports only the opaque
+      // "OSError: [Errno 29] I/O error" with the cause hidden in console.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          // Step 1: pre-filled lines from the stdin box, in order.
+          if (stdinIndex < stdinLines.length) {
+            activePrompt = "";
+            return stdinLines[stdinIndex++];
+          }
+          // Step 2: ask the user inline — never return null on the happy
+          // path (that is EOF and would raise
+          // "EOFError: EOF when reading a line").
+          const prompt = activePrompt;
+          activePrompt = "";
+          workerScope.postMessage({ type: "input-request", runId, prompt });
+          return waitForLine();
+        } catch (err) {
+          console.error(`Cursive stdin handler error (attempt ${attempt}):`, err);
+          if (attempt >= 2) {
+            const detail =
+              err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+            try {
+              workerScope.postMessage({
+                type: "output",
+                runId,
+                text: `stdin error: ${detail}\n`,
+                isError: true,
+              });
+            } catch {
+              /* ignore */
+            }
+            return null; // EOF — end the program with the true cause visible
+          }
+        }
       }
-      // Step 2: ask the user inline — never return null (that is EOF and
-      // would raise "EOFError: EOF when reading a line").
-      const prompt = activePrompt;
-      activePrompt = "";
-      workerScope.postMessage({ type: "input-request", runId, prompt });
-      return waitForLine();
     },
   });
 
