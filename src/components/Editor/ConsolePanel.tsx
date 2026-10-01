@@ -36,6 +36,12 @@ interface ConsolePanelProps {
   allFiles: FileItem[];
   stdin: string;
   setStdin: (val: string) => void;
+  /** Live stdout/stderr streamed while the program runs (Pyodide worker). */
+  liveOutput?: string;
+  /** Prompt of a pending input() call — renders the inline input row. */
+  pendingPrompt?: string | null;
+  /** Submit the user's inline answer for the pending input(). */
+  onSubmitInput?: (value: string) => void;
   onRun: () => void;
   onClose: () => void;
   onClear: () => void;
@@ -59,12 +65,20 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
   allFiles,
   stdin,
   setStdin,
+  liveOutput = "",
+  pendingPrompt = null,
+  onSubmitInput,
   onRun,
   onClose,
   onClear,
 }) => {
   const [activeTab, setActiveTab] = useState<"terminal" | "preview">("terminal");
   const [copied, setCopied] = useState(false);
+  // Draft of the inline input() answer the user is currently typing.
+  const [inputDraft, setInputDraft] = useState("");
+  useEffect(() => {
+    setInputDraft("");
+  }, [pendingPrompt]);
 
   // --- Panel layout state -------------------------------------------------
   const [panelWidth, setPanelWidth] = useState(() => loadConsolePrefs().width);
@@ -252,6 +266,13 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
     )
   );
 
+  // Inline input row: the pending prompt is normally the tail of the live
+  // transcript (Python wrote it just before input() blocked), so render the
+  // field right after it instead of printing the prompt twice.
+  const pendingPromptText = pendingPrompt ?? "";
+  const promptInTranscript =
+    pendingPrompt !== null && liveOutput.endsWith(pendingPromptText);
+
   /* ------------------------------------------------------------------ */
   /* Shared panel body — identical content in both layouts               */
   /* ------------------------------------------------------------------ */
@@ -410,6 +431,58 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
                     {runtimeStatus ||
                       `Executing ${activeFile?.name || "code"} in your browser...`}
                   </span>
+                </div>
+              )}
+
+              {/* Live transcript streamed from the Pyodide worker */}
+              {isRunning && pendingPrompt === null && liveOutput && (
+                <div className="text-slate-200">{liveOutput}</div>
+              )}
+
+              {/* Inline terminal input — answer input() without a popup */}
+              {isRunning && pendingPrompt !== null && (
+                <div className="text-slate-200">
+                  {promptInTranscript
+                    ? liveOutput.slice(
+                        0,
+                        liveOutput.length - pendingPromptText.length
+                      )
+                    : liveOutput}
+                  {promptInTranscript ? (
+                    pendingPromptText
+                  ) : (
+                    <span className="text-slate-400">{pendingPromptText}</span>
+                  )}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      onSubmitInput?.(inputDraft);
+                      setInputDraft("");
+                    }}
+                    className="inline-flex items-center gap-1.5 align-baseline ml-1.5"
+                  >
+                    <input
+                      autoFocus
+                      value={inputDraft}
+                      onChange={(e) => setInputDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          onSubmitInput?.("");
+                          setInputDraft("");
+                        }
+                      }}
+                      placeholder="type your input…"
+                      className="w-40 sm:w-56 bg-slate-900 border-b border-blue-500/70 rounded px-1.5 py-0.5 text-xs text-blue-100 font-mono focus:outline-none focus:border-blue-400"
+                    />
+                    <button
+                      type="submit"
+                      title="Send input (Esc sends an empty line)"
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white font-semibold shrink-0"
+                    >
+                      Enter ↵
+                    </button>
+                  </form>
                 </div>
               )}
 

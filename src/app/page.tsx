@@ -82,6 +82,11 @@ export default function CodePadApp() {
   const [executionResult, setExecutionResult] =
     useState<ExecutionResult | null>(null);
   const [stdin, setStdin] = useState("");
+  // Phase 2 — inline terminal input: live transcript streamed from the
+  // Pyodide worker, plus the prompt of a pending input() call.
+  const [liveOutput, setLiveOutput] = useState("");
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+  const inputResolverRef = useRef<((value: string) => void) | null>(null);
 
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">(
@@ -320,6 +325,25 @@ export default function CodePadApp() {
     setRunLanguage(detected === "plaintext" ? "javascript" : detected);
   }, [activeFileId, activeFile?.name]);
 
+  // Inline terminal input: resolve when the user submits a line in the
+  // output panel while Python is blocked on input().
+  const requestInput = useCallback(
+    (prompt: string) =>
+      new Promise<string>((resolve) => {
+        setPendingPrompt(prompt);
+        inputResolverRef.current = (value: string) => {
+          inputResolverRef.current = null;
+          setPendingPrompt(null);
+          resolve(value);
+        };
+      }),
+    []
+  );
+
+  const handleSubmitInput = useCallback((value: string) => {
+    inputResolverRef.current?.(value);
+  }, []);
+
   // Run code entirely in the browser (Pyodide for Python, sandboxed iframe for JS)
   const handleRunCode = async () => {
     if (!activeFile) return;
@@ -328,6 +352,8 @@ export default function CodePadApp() {
     setIsRunning(true);
     setExecutionResult(null);
     setRuntimeStatus(null);
+    setLiveOutput("");
+    setPendingPrompt(null);
 
     const languageId =
       runLanguage || getLanguageByFilename(activeFile.name).id || activeFile.language;
@@ -343,6 +369,8 @@ export default function CodePadApp() {
               setRuntimeStatus("Loading Python runtime (first run only)...");
             }
           },
+          onOutput: (text) => setLiveOutput((prev) => prev + text),
+          requestInput,
         }
       );
       setExecutionResult(data);
@@ -356,6 +384,12 @@ export default function CodePadApp() {
         status: "error",
       });
     } finally {
+      // Release any input request left dangling (e.g. a timeout that
+      // terminated the worker while the user was typing).
+      const resolvePending = inputResolverRef.current;
+      inputResolverRef.current = null;
+      resolvePending?.("");
+      setPendingPrompt(null);
       setRuntimeStatus(null);
       setIsRunning(false);
     }
@@ -627,6 +661,9 @@ export default function CodePadApp() {
           allFiles={files}
           stdin={stdin}
           setStdin={setStdin}
+          liveOutput={liveOutput}
+          pendingPrompt={pendingPrompt}
+          onSubmitInput={handleSubmitInput}
           onRun={handleRunCode}
           onClose={handleCloseConsole}
           onClear={() => setExecutionResult(null)}
